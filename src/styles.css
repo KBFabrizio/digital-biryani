@@ -1,0 +1,217 @@
+/* Every size on the page is in reference pixels from a 2290px-wide layout.
+   One reference pixel is --u, which is the frame width divided by 2290. */
+:root {
+  --page: #ffffff;
+  --ink: #1c1c1e;
+  --ink-soft: #6e6e73;
+  --rule: #1c1c1e;
+  --surround: #e4e4e7;
+  --photo-fallback: #3d4150;
+  --font-body: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --gutter: 16px;
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-block: var(--gutter);
+  padding-left: max(var(--gutter), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--gutter), env(safe-area-inset-right, 0px));
+  background: var(--surround);
+  color: var(--ink);
+  font-family: var(--font-body);
+}
+
+/* The frame keeps a 16:9 ratio and fits inside the window on both axes. */
+.stage {
+  container-type: inline-size;
+  position: relative;
+  width: min(100%, calc((100dvh - 2 * var(--gutter)) * 16 / 9));
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--page);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), 0 12px 40px rgb(0 0 0 / 0.12);
+}
+
+/* Container query units resolve against the frame only inside it. */
+.stage * {
+  --u: calc(100cqw / 2290);
+}
+
+.scroller {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.scroller:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+
+.content {
+  position: relative;
+  padding-top: calc(var(--u) * 52);
+  padding-bottom: calc(var(--u) * 700);
+}
+
+/* Posted date, rule and share icons. The block ignores the pointer so the wheel
+   still reaches the scroller underneath it, and only the share buttons take clicks. */
+.meta {
+  position: absolute;
+  left: calc(var(--u) * 101);
+  top: calc(var(--u) * 34);
+  z-index: 2;
+  width: calc(var(--u) * 322);
+  padding-top: calc(var(--u) * 22);
+  border-top: calc(var(--u) * 3) solid var(--rule);
+  font-size: calc(var(--u) * 19);
+  line-height: 1.6;
+  pointer-events: none;
+}
+
+.meta-label {
+  display: block;
+  color: var(--ink-soft);
+}
+
+.meta-date {
+  display: block;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.share {
+  display: flex;
+  gap: calc(var(--u) * 14);
+  margin: calc(var(--u) * 46) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.share-button {
+  display: grid;
+  place-items: center;
+  width: calc(var(--u) * 38);
+  height: calc(var(--u) * 38);
+  padding: 0;
+  border: calc(var(--u) * 2) solid var(--ink);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.share-button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.share-button[aria-pressed="true"] svg {
+  fill: currentColor;
+}
+
+.share-button svg {
+  width: 46%;
+  height: 46%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+}
+
+/* Text column. The body size is 24.5 reference px plus 1pt (1.333px), which gives 25.83. */
+.article {
+  width: calc(var(--u) * 1025);
+  margin-left: calc(var(--u) * 1175);
+  font-size: calc(var(--u) * 25.83);
+  line-height: calc(var(--u) * 43.5);
+  /* Clipping keeps the floats from extending the scroll height. */
+  overflow: clip;
+}
+
+.article p {
+  margin: 0 0 calc(var(--u) * 43.5);
+}
+
+/* The spacer float takes no width and moves the band float down to the photo's
+   position on screen. The script sets both heights on every scroll frame. */
+.wrap-spacer {
+  float: left;
+  width: 1px;
+  height: 0;
+  margin-right: -1px;
+}
+
+.wrap-band {
+  float: left;
+  clear: left;
+  width: calc(var(--u) * 93);
+  height: 0;
+}
+
+/* The photo and caption sit outside the scroller, so they stay fixed in the frame. */
+.figure {
+  position: absolute;
+  left: calc(var(--u) * 638);
+  top: calc(var(--u) * 300);
+  z-index: 2;
+  width: calc(var(--u) * 537);
+  margin: 0;
+  pointer-events: none;
+}
+
+.photo {
+  display: block;
+  width: 100%;
+  height: calc(var(--u) * 606);
+  object-fit: cover;
+  object-position: center;
+  background: var(--photo-fallback);
+}
+
+.caption {
+  display: grid;
+  grid-template-columns: calc(var(--u) * 57) calc(var(--u) * 330);
+  margin-top: calc(var(--u) * 24);
+  font-size: calc(var(--u) * 17.5);
+  line-height: 1.35;
+  color: var(--ink-soft);
+}
+
+.caption-number {
+  color: var(--ink);
+}
+
+.caption-credit {
+  font-size: 0.92em;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

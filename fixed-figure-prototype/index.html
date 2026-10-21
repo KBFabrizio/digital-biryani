@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fixed Figure Smooth Scroll</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: a 16:9 stage measured in reference units taken from the 2290px-wide screenshot.
+     The figure sits outside the scroller, and two floats inside the text column follow it on every scroll frame. */
+  :root {
+    --page: #ffffff;
+    --ink: #1c1c1e;
+    --ink-soft: #6e6e73;
+    --rule: #1c1c1e;
+    --surround: #e4e4e7;
+    --placeholder-a: #3d4150;
+    --placeholder-b: #545a6b;
+    --font-body: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color-scheme: light;
+  }
+  html, body { height: 100%; }
+  body {
+    background: var(--surround);
+    color: var(--ink);
+    font-family: var(--font-body);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding-block: 16px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box;
+  }
+
+  .stage {
+    container-type: inline-size;
+    position: relative;
+    width: min(100%, calc((100dvh - 80px) * 16 / 9));
+    max-width: 100%;
+    aspect-ratio: 16 / 9;
+    background: var(--page);
+    box-shadow: 0 1px 2px rgb(0 0 0 / .08), 0 12px 40px rgb(0 0 0 / .12);
+    overflow: hidden;
+  }
+  .stage * { --u: calc(100cqw / 2290); }
+
+  .scroller {
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+  .scroller:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+
+  .content {
+    position: relative;
+    padding-top: calc(var(--u) * 52);
+    padding-bottom: calc(var(--u) * 700);
+  }
+
+  /* Left meta column */
+  .meta {
+    position: absolute;
+    left: calc(var(--u) * 101);
+    top: calc(var(--u) * 34);
+    width: calc(var(--u) * 322);
+    border-top: calc(var(--u) * 3) solid var(--rule);
+    padding-top: calc(var(--u) * 22);
+    font-size: calc(var(--u) * 19);
+    line-height: 1.6;
+    z-index: 2;
+  }
+  .meta .label { color: var(--ink-soft); }
+  .meta .date { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .share { display: flex; gap: calc(var(--u) * 14); margin-top: calc(var(--u) * 46); }
+  .share span {
+    width: calc(var(--u) * 38); height: calc(var(--u) * 38);
+    border: calc(var(--u) * 2) solid var(--ink);
+    border-radius: 50%;
+    display: grid; place-items: center;
+  }
+  .share svg { width: 46%; height: 46%; fill: none; stroke: var(--ink); stroke-width: 2.4; }
+
+  /* Text column. Body size is 24.5 reference px plus 1pt (1.333px), giving 25.83. */
+  .article {
+    margin-left: calc(var(--u) * 1175);
+    width: calc(var(--u) * 1025);
+    font-size: calc(var(--u) * 25.83);
+    line-height: calc(var(--u) * 43.5);
+    overflow: clip;
+  }
+  .article p { margin: 0 0 calc(var(--u) * 43.5); }
+
+  /* The two floats that carve the indent. The spacer pushes the band down to wherever
+     the fixed figure currently sits relative to the text. */
+  .wrap-spacer { float: left; width: 1px; margin-right: -1px; height: 0; }
+  .wrap-band { float: left; clear: left; width: calc(var(--u) * 93); height: 0; }
+
+  /* Fixed figure */
+  .figure {
+    position: absolute;
+    left: calc(var(--u) * 638);
+    top: calc(var(--u) * 300);
+    width: calc(var(--u) * 537);
+    margin: 0;
+    pointer-events: none;
+    z-index: 2;
+  }
+  .photo {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: calc(var(--u) * 606);
+    object-fit: cover;
+    object-position: center;
+    background: var(--placeholder-a);
+  }
+  .caption {
+    display: grid;
+    grid-template-columns: calc(var(--u) * 57) calc(var(--u) * 330);
+    margin-top: calc(var(--u) * 24);
+    font-size: calc(var(--u) * 17.5);
+    line-height: 1.35;
+    color: var(--ink-soft);
+  }
+  .caption .num { color: var(--ink); }
+  .caption .credit { font-weight: 700; color: var(--ink); letter-spacing: .02em; font-size: .92em; }
+
+  .hint { font-size: 13px; color: var(--ink-soft); text-align: center; max-width: 60ch; margin: 0; }
+</style>
+<style>body { margin: 0; } img { max-width: 100%; }</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <div class="scroller" id="scroller" tabindex="0" aria-label="Article text, scrollable">
+    <div class="content">
+      <div class="article" id="article">
+        <div class="wrap-spacer" id="wrapSpacer"></div>
+        <div class="wrap-band" id="wrapBand"></div>
+        <div id="body"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="meta">
+        <div class="label">Posted</div>
+        <div class="date">09/14/26</div>
+        <div class="share" aria-hidden="true">
+          <span><svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></span>
+          <span><svg viewBox="0 0 24 24"><rect x="3.5" y="6" width="17" height="12" rx="1.5"/><path d="m4 7 8 6 8-6"/></svg></span>
+          <span><svg viewBox="0 0 24 24"><path d="M7 4h10v16l-5-4-5 4z"/></svg></span>
+        </div>
+  </div>
+
+  <figure class="figure" id="figure">
+    <img class="photo" src="clownfish.jpg" alt="A close-up of a frowning clownfish with a caption bar that reads, Where's my fuckin son">
+    <figcaption class="caption">
+      <span class="num">1</span>
+      <span><span class="credit">© PHOTOGRAPHER NAME.</span> Callum performs live at the <em>Harbour Lights Festival</em>, Lisbon</span>
+    </figcaption>
+  </figure>
+</div>
+<p class="hint">Scroll inside the frame with a mouse wheel or trackpad. The text eases to a stop while the posted date, share icons, image and caption stay in place.</p>
+
+<script>
+  const paragraphs = [
+    "Then he walks onstage with a battered acoustic guitar slung low and a tambourine in his back pocket. The lights stutter. It's early September, and the former Halyard frontman is playing one of his first solo shows on this side of the Atlantic, in a low-ceilinged room in Bushwick that holds maybe three hundred people. Rourke has come back from a long break (which, by his own account, involved a lot of late nights and very little songwriting) after his old band split in 2015. He and a four-piece backing band tear through a run of Halyard favorites, along with songs from his forthcoming solo record, <em>Low Tide Radio</em>: the jittery, shout-along “Glasshouse” and the slower, more reflective “Harbour Street.”",
+    "Then he starts “Northern Line,” and the crowd loses its mind, but he stops the song cold two bars before the big singalong finish. He puts the guitar down and walks off. A stranger at the bar tells me afterward that it was the best thing he's seen all year, and that stopping a hit halfway through is exactly what Rourke would do. I checked, and the stranger is right. Six weeks later, Rourke calls me from a hotel in Rotterdam after a show and spends an hour proving he's still the most quotable person in guitar music. We talk about the long break, the slow thaw with his old bandmate, the twentieth anniversary of the Halyard album that nearly broke them, a hotel clerk in Glasgow who wouldn't give him a room key without ID, and the new record, which turns out to be gentler than anyone expected.",
+    "Rourke's mood shows in the way he moves more clearly than in anyone else I've interviewed. When he's restless, he paces the length of a room. When he's content, he goes very still and watches people. Either way, the people around him notice within a minute, whether they're in a rehearsal studio, a car, a dressing room or an arena.",
+    "At 44, Rourke hasn't lost the cheerful swagger that drove his bandmate out of Halyard in 2014. He tells me he likes to talk for a long time without a plan, because a good line usually turns up somewhere in the middle. He's right about that, and a few of those lines are below.",
+    "The band he's toured with for the past year is younger than Halyard ever was. The drummer, Ines Okafor, is 26 and learned half the old catalog from concert videos before her audition. Rourke says she plays the songs faster than he wrote them, and that he's stopped asking her to slow down.",
+    "<em>Low Tide Radio</em> was recorded over eleven days in a converted boathouse outside Cork. Rourke wrote most of the lyrics in a notebook he kept in his coat pocket, and he admits that two of the songs started as letters he never sent. The producer, Marta Lindqvist, kept the vocal takes rough on purpose. She told me she wanted the record to sound like a person standing close to you.",
+    "He still won't say whether Halyard will play together again. When I ask, he laughs and changes the subject to football, then comes back to it a few minutes later without being prompted. He says the door isn't locked, and he also says nobody has knocked on it.",
+    "By the end of the call, the hotel bar downstairs is closing and someone is vacuuming the corridor outside his room. Rourke says he's going to bed, and then he talks for another twenty minutes about the first record he ever bought, a secondhand single with a scratch across the B-side that he still owns."
+  ];
+  const REPEATS = 3;
+  document.getElementById("body").innerHTML =
+    Array.from({ length: REPEATS }, () => paragraphs.map(p => `<p>${p}</p>`).join("")).join("");
+
+  const stage = document.getElementById("stage");
+  const scroller = document.getElementById("scroller");
+  const article = document.getElementById("article");
+  const figure = document.getElementById("figure");
+  const spacer = document.getElementById("wrapSpacer");
+  const band = document.getElementById("wrapBand");
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
+
+  // Vertical clearance around the figure, in reference pixels from the screenshot.
+  // The smallest gap above the image equals this value plus about 8.8px of line spacing
+  // below the text. 89.08 makes that gap 97.88px, about two and a quarter lines.
+  const CLEAR_ABOVE = 89.08;
+  const CLEAR_BELOW = 22;
+
+  function layout() {
+    const u = stage.clientWidth / 2290;
+    const a = article.getBoundingClientRect();
+    const f = figure.getBoundingClientRect();
+    const top = f.top - a.top - CLEAR_ABOVE * u;
+    spacer.style.height = Math.max(0, top) + "px";
+    band.style.height = (f.height + (CLEAR_ABOVE + CLEAR_BELOW) * u) + "px";
+  }
+
+  // Eased scrolling. The wheel moves a target position, and the scroller
+  // glides toward it each frame. Lower SMOOTHING means a longer, softer glide.
+  const SMOOTHING = 6;
+  let target = 0, current = 0, lastSet = -1, running = false, lastTime = 0, rafId = 0;
+
+  const maxScroll = () => scroller.scrollHeight - scroller.clientHeight;
+  const clamp = v => Math.max(0, Math.min(maxScroll(), v));
+
+  scroller.addEventListener("wheel", e => {
+    if (reduceMotion.matches || e.ctrlKey) return;
+    e.preventDefault();
+    const unit = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? scroller.clientHeight : 1;
+    if (!running) { target = current = scroller.scrollTop; }
+    target = clamp(target + e.deltaY * unit);
+    start();
+  }, { passive: false });
+
+  function start() {
+    if (running) return;
+    running = true;
+    lastTime = 0;
+    rafId = requestAnimationFrame(step);
+  }
+
+  function step(now) {
+    const dt = lastTime ? Math.min(0.05, (now - lastTime) / 1000) : 1 / 60;
+    lastTime = now;
+    current += (target - current) * (1 - Math.exp(-dt * SMOOTHING));
+    if (Math.abs(target - current) < 0.3) current = target;
+    lastSet = Math.round(current);
+    scroller.scrollTop = current;
+    layout();
+    if (current !== target) rafId = requestAnimationFrame(step);
+    else running = false;
+  }
+
+  // Scrollbar drags, keyboard and touch scroll natively; the wrap still follows.
+  let queued = false;
+  scroller.addEventListener("scroll", () => {
+    if (running && Math.abs(scroller.scrollTop - lastSet) > 2) {
+      cancelAnimationFrame(rafId);
+      running = false;
+      target = current = scroller.scrollTop;
+    }
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => { queued = false; layout(); });
+  }, { passive: true });
+
+  new ResizeObserver(() => { layout(); }).observe(stage);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(layout);
+  layout();
+</script>
+</body>
+</html>
