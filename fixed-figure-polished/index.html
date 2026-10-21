@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Fixed Figure Smooth Scroll</title>
+<title>Fixed Figure Polished Scroll</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
   /* Layout: a 16:9 stage measured in reference units taken from the 2290px-wide screenshot.
@@ -53,14 +53,38 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;
+    /* Text fades out over about one line at the top of the frame and two at the bottom. */
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 calc(var(--u) * 46), #000 calc(100% - var(--u) * 92), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 calc(var(--u) * 46), #000 calc(100% - var(--u) * 92), transparent 100%);
   }
   .scroller:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 
   .content {
     position: relative;
-    padding-top: calc(var(--u) * 52);
-    padding-bottom: calc(var(--u) * 700);
+    /* One full frame of room above the first line, so everything can scroll down out of
+       view at the top. The page opens scrolled past this room, at the original start. */
+    padding-top: calc(var(--u) * (1288.125 + 52));
+    /* One full frame of room after the last line, so the text, image and date
+       can all scroll completely out of view at the end. */
+    padding-bottom: calc(var(--u) * 1288.125);
   }
+
+  /* BEGIN and END markers in the empty frames, 225px at the 2290px reference width and
+     aligned with the image's left edge. BEGIN's bottom edge sits 100px above the opening
+     view, and END's top edge sits 100px below the top of the final view. */
+  .marker {
+    position: absolute;
+    left: calc(var(--u) * 638);
+    margin: 0;
+    font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+    font-size: calc(var(--u) * 225);
+    font-weight: 700;
+    letter-spacing: calc(var(--u) * -4);
+    line-height: 1;
+    color: var(--ink);
+  }
+  .marker-begin { top: calc(var(--u) * (1288.125 - 100 - 225)); }
+  .marker-end { bottom: calc(var(--u) * (1288.125 - 100 - 225)); }
 
   /* Left meta column */
   .meta {
@@ -93,7 +117,16 @@
     line-height: calc(var(--u) * 43.5);
     overflow: clip;
   }
-  .article p { margin: 0 0 calc(var(--u) * 43.5); }
+  .article p {
+    margin: 0 0 calc(var(--u) * 43.5);
+    text-wrap: pretty;
+    hanging-punctuation: first;
+    font-kerning: normal;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
 
   /* The two floats that carve the indent. The spacer pushes the band down to wherever
      the fixed figure currently sits relative to the text. */
@@ -138,15 +171,17 @@
 <div class="stage" id="stage">
   <div class="scroller" id="scroller" tabindex="0" aria-label="Article text, scrollable">
     <div class="content">
+      <p class="marker marker-begin">BEGIN</p>
       <div class="article" id="article">
         <div class="wrap-spacer" id="wrapSpacer"></div>
         <div class="wrap-band" id="wrapBand"></div>
         <div id="body"></div>
       </div>
+      <p class="marker marker-end">END</p>
     </div>
   </div>
 
-  <div class="meta">
+  <div class="meta" id="meta">
         <div class="label">Posted</div>
         <div class="date">09/14/26</div>
         <div class="share" aria-hidden="true">
@@ -164,7 +199,7 @@
     </figcaption>
   </figure>
 </div>
-<p class="hint">Scroll inside the frame with a mouse wheel or trackpad. The text eases to a stop while the posted date, share icons, image and caption stay in place.</p>
+<p class="hint">Scroll inside the frame with a mouse wheel or trackpad. The text eases to a stop, while the posted date, share icons, image and caption stay in place until the text reaches its start or end, then scroll away with it.</p>
 
 <script>
   const paragraphs = [
@@ -178,6 +213,7 @@
     "By the end of the call, the hotel bar downstairs is closing and someone is vacuuming the corridor outside his room. Rourke says he's going to bed, and then he talks for another twenty minutes about the first record he ever bought, a secondhand single with a scratch across the B-side that he still owns."
   ];
   const REPEATS = 3;
+
   document.getElementById("body").innerHTML =
     Array.from({ length: REPEATS }, () => paragraphs.map(p => `<p>${p}</p>`).join("")).join("");
 
@@ -189,14 +225,43 @@
   const band = document.getElementById("wrapBand");
   const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
 
-  // Vertical clearance around the figure, in reference pixels from the screenshot.
-  // The smallest gap above the image equals this value plus about 8.8px of line spacing
-  // below the text. 89.08 makes that gap 97.88px, about two and a quarter lines.
+  // Vertical clearance around the figure, in reference pixels. The smallest gap above the
+  // image is this value plus about 8.8px of line spacing, which comes to 97.88px.
   const CLEAR_ABOVE = 89.08;
   const CLEAR_BELOW = 22;
 
-  function layout() {
-    const u = stage.clientWidth / 2290;
+  // Scroll feel. A spring follows the wheel, so the page speeds up and slows down
+  // smoothly instead of jumping at the start of each wheel click.
+  const SPRING_NOTCH = 9;    // separate wheel clicks: soft, unhurried settle
+  const SPRING_STREAM = 26;  // trackpads, free-spin wheels and mice with their own smoothing: close follow
+  const STREAM_GAP = 40;     // ms; wheel events closer together than this count as a stream
+
+  let u = stage.clientWidth / 2290;
+
+  const meta = document.getElementById("meta");
+  const paraEls = article.querySelectorAll("#body p");
+  const lastPara = paraEls[paraEls.length - 1];
+
+  // Once the last line of text rises to the bottom of the caption, the image, caption,
+  // date and share icons move up with the text and scroll out of the frame together.
+  function releaseFixed() {
+    const s = stage.getBoundingClientRect();
+    const textEnd = lastPara.getBoundingClientRect().bottom - s.top;
+    const figureEnd = figure.offsetTop + figure.offsetHeight + CLEAR_BELOW * u;
+    const lift = Math.max(0, figureEnd - textEnd);
+    // Scrolling up past the opening position pushes the text down, and the image,
+    // caption, date and share icons move down with it and out of the frame.
+    const textStart = article.getBoundingClientRect().top - s.top;
+    const drop = Math.max(0, textStart - 52 * u);
+    const shift = drop - lift;
+    const t = shift ? `translateY(${shift.toFixed(2)}px)` : "";
+    figure.style.transform = t;
+    meta.style.transform = t;
+  }
+
+  function placeFloats() {
+    u = stage.clientWidth / 2290;
+    releaseFixed();
     const a = article.getBoundingClientRect();
     const f = figure.getBoundingClientRect();
     const top = f.top - a.top - CLEAR_ABOVE * u;
@@ -204,58 +269,74 @@
     band.style.height = (f.height + (CLEAR_ABOVE + CLEAR_BELOW) * u) + "px";
   }
 
-  // Eased scrolling. The wheel moves a target position, and the scroller
-  // glides toward it each frame. Lower SMOOTHING means a longer, softer glide.
-  const SMOOTHING = 6;
-  let target = 0, current = 0, lastSet = -1, running = false, lastTime = 0, rafId = 0;
-
+  // Wheel handling with a critically damped spring.
+  let target = 0, pos = 0, vel = 0, omega = SPRING_NOTCH;
+  let springOn = false, lastSet = -1, lastWheel = 0;
   const maxScroll = () => scroller.scrollHeight - scroller.clientHeight;
   const clamp = v => Math.max(0, Math.min(maxScroll(), v));
 
   scroller.addEventListener("wheel", e => {
     if (reduceMotion.matches || e.ctrlKey) return;
     e.preventDefault();
+    const now = performance.now();
     const unit = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? scroller.clientHeight : 1;
-    if (!running) { target = current = scroller.scrollTop; }
+    const stream = now - lastWheel < STREAM_GAP;
+    lastWheel = now;
+    omega = stream ? SPRING_STREAM : SPRING_NOTCH;
+    if (!springOn) { pos = target = scroller.scrollTop; vel = 0; springOn = true; }
     target = clamp(target + e.deltaY * unit);
-    start();
+    kick();
   }, { passive: false });
 
-  function start() {
-    if (running) return;
-    running = true;
-    lastTime = 0;
-    rafId = requestAnimationFrame(step);
+  function stepSpring(dt) {
+    const steps = Math.ceil(dt / (1 / 240));
+    const h = dt / steps;
+    for (let i = 0; i < steps; i++) {
+      const acc = omega * omega * (target - pos) - 2 * omega * vel;
+      vel += acc * h;
+      pos += vel * h;
+    }
+    if (Math.abs(target - pos) < 0.25 && Math.abs(vel) < 4) { pos = target; vel = 0; springOn = false; }
+    lastSet = Math.round(pos);
+    scroller.scrollTop = pos;
   }
 
-  function step(now) {
+  let running = false, lastTime = 0, layoutDirty = true;
+  function tick(now) {
     const dt = lastTime ? Math.min(0.05, (now - lastTime) / 1000) : 1 / 60;
     lastTime = now;
-    current += (target - current) * (1 - Math.exp(-dt * SMOOTHING));
-    if (Math.abs(target - current) < 0.3) current = target;
-    lastSet = Math.round(current);
-    scroller.scrollTop = current;
-    layout();
-    if (current !== target) rafId = requestAnimationFrame(step);
-    else running = false;
+    if (springOn) stepSpring(dt);
+    if (layoutDirty || springOn) { placeFloats(); layoutDirty = false; }
+    if (springOn) requestAnimationFrame(tick);
+    else { running = false; lastTime = 0; }
+  }
+  function kick() {
+    if (running) return;
+    running = true;
+    requestAnimationFrame(tick);
   }
 
   // Scrollbar drags, keyboard and touch scroll natively; the wrap still follows.
-  let queued = false;
   scroller.addEventListener("scroll", () => {
-    if (running && Math.abs(scroller.scrollTop - lastSet) > 2) {
-      cancelAnimationFrame(rafId);
-      running = false;
-      target = current = scroller.scrollTop;
+    if (springOn && Math.abs(scroller.scrollTop - lastSet) > 2) {
+      springOn = false; vel = 0;
     }
-    if (queued) return;
-    queued = true;
-    requestAnimationFrame(() => { queued = false; layout(); });
+    layoutDirty = true;
+    kick();
   }, { passive: true });
 
-  new ResizeObserver(() => { layout(); }).observe(stage);
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(layout);
-  layout();
+  // Open at the original starting point, below the empty room at the top.
+  const TOP_ROOM = 1288.125;
+  let lastWidth = stage.clientWidth;
+  scroller.scrollTop = TOP_ROOM * (lastWidth / 2290);
+  new ResizeObserver(() => {
+    const w = stage.clientWidth;
+    if (w !== lastWidth && lastWidth) scroller.scrollTop = scroller.scrollTop * (w / lastWidth);
+    lastWidth = w;
+    placeFloats();
+  }).observe(stage);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(placeFloats);
+  placeFloats();
 </script>
 </body>
 </html>

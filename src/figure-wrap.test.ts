@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLEAR_ABOVE, CLEAR_BELOW, wrapHeights } from "./figure-wrap";
+import { CLEAR_ABOVE, CLEAR_BELOW, TEXT_TOP, releaseShift, wrapHeights } from "./figure-wrap";
 
 describe("wrapHeights", () => {
   const unit = 0.5;
@@ -27,5 +27,28 @@ describe("wrapHeights", () => {
     expect(overhang).toBeLessThan(0);
     expect(spacer).toBe(0);
     expect(band).toBeCloseTo(400 + (CLEAR_ABOVE + CLEAR_BELOW) * unit + overhang, 10);
+  });
+});
+
+describe("releaseShift", () => {
+  const unit = 0.5;
+  const figureEnd = 600;
+  const opening = { textStart: TEXT_TOP * unit, textEnd: 5000, figureEnd, unit };
+
+  it("leaves everything in place in the opening view", () => {
+    expect(releaseShift(opening)).toBe(0);
+  });
+
+  it("leaves everything in place while the text scrolls past the photo", () => {
+    expect(releaseShift({ ...opening, textStart: -2000, textEnd: figureEnd + CLEAR_BELOW * unit })).toBe(0);
+  });
+
+  it("lifts everything once the last line rises above the caption plus the clearance", () => {
+    const shift = releaseShift({ ...opening, textStart: -4000, textEnd: figureEnd + CLEAR_BELOW * unit - 150 });
+    expect(shift).toBeCloseTo(-150, 10);
+  });
+
+  it("drops everything once the first line moves below its opening position", () => {
+    expect(releaseShift({ ...opening, textStart: TEXT_TOP * unit + 300 })).toBeCloseTo(300, 10);
   });
 });

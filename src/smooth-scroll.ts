@@ -1,18 +1,31 @@
-// Eased wheel scrolling. The wheel handler moves a target scroll position, and each
-// animation frame moves the real scroll position toward the target. Scrollbar drags,
-// arrow keys and touch scrolling stay native, and a scroll that this module didn't
-// cause cancels the glide. Viewers who've turned on reduced motion get standard scrolling.
+// Eased wheel scrolling. The wheel handler moves a target scroll position, and a
+// critically damped spring moves the real scroll position toward it, so the speed
+// changes gradually at the start and end of each move. Scrollbar drags, arrow keys
+// and touch scrolling stay native, and a scroll that this module didn't cause stops
+// the spring. Viewers who've turned on reduced motion get standard scrolling.
 
-/** Higher values stop sooner. The glide covers 1 - e^(-dt × SMOOTHING) of the remaining distance per frame. */
-export const SMOOTHING = 6;
+/** Spring frequency for separate wheel clicks, which settle softly. */
+export const SPRING_NOTCH = 9;
 
-/** The glide snaps to the target once it's this close, in px. */
-const SNAP_DISTANCE = 0.3;
+/** Spring frequency for streams of wheel events from trackpads, free-spin wheels and mice with their own smoothing, which follow closely. */
+export const SPRING_STREAM = 26;
 
-/** A scroll position this far from the last one the glide set came from somewhere else, in px. */
+/** Wheel events closer together than this count as a stream, in ms. */
+export const STREAM_GAP = 40;
+
+/** The spring integrates in steps no longer than this, in seconds. */
+const SUBSTEP = 1 / 240;
+
+/** The spring settles once it's this close to the target, in px, */
+const SETTLE_DISTANCE = 0.25;
+
+/** and moving slower than this, in px per second. */
+const SETTLE_SPEED = 4;
+
+/** A scroll position this far from the last one the spring set came from somewhere else, in px. */
 const FOREIGN_SCROLL_DISTANCE = 2;
 
-/** Longest frame the glide will step over, in seconds, so a stalled tab doesn't jump. */
+/** Longest frame the spring will step over, in seconds, so a stalled tab doesn't jump. */
 const MAX_FRAME = 0.05;
 
 /** Pixels per line for wheel events that report lines instead of pixels. */
@@ -22,9 +35,21 @@ const LINE_HEIGHT = 40;
 const DELTA_LINE = 1;
 const DELTA_PAGE = 2;
 
-export function easeToward(current: number, target: number, dt: number, smoothing = SMOOTHING): number {
-  const next = current + (target - current) * (1 - Math.exp(-dt * smoothing));
-  return Math.abs(target - next) < SNAP_DISTANCE ? target : next;
+export interface SpringState {
+  pos: number;
+  vel: number;
+}
+
+/** Advances a critically damped spring toward the target. Returns null once it has settled on the target. */
+export function stepSpring({ pos, vel }: SpringState, target: number, omega: number, dt: number): SpringState | null {
+  const steps = Math.max(1, Math.ceil(dt / SUBSTEP));
+  const h = dt / steps;
+  for (let i = 0; i < steps; i++) {
+    vel += (omega * omega * (target - pos) - 2 * omega * vel) * h;
+    pos += vel * h;
+  }
+  if (Math.abs(target - pos) < SETTLE_DISTANCE && Math.abs(vel) < SETTLE_SPEED) return null;
+  return { pos, vel };
 }
 
 export function wheelDeltaInPixels(event: Pick<WheelEvent, "deltaY" | "deltaMode">, pageHeight: number): number {
@@ -36,40 +61,37 @@ export function wheelDeltaInPixels(event: Pick<WheelEvent, "deltaY" | "deltaMode
 export interface SmoothScrollOptions {
   /** Element that receives wheel events. Defaults to the scroller. */
   wheelTarget?: HTMLElement;
-  /** Runs after each frame of the glide sets the scroll position, before the browser paints. */
+  /** Runs after each frame of the spring sets the scroll position, before the browser paints. */
   onFrame?: () => void;
 }
 
 export function createSmoothScroll(scroller: HTMLElement, { wheelTarget = scroller, onFrame }: SmoothScrollOptions = {}) {
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+  let spring: SpringState | null = null;
   let target = 0;
-  let current = 0;
+  let omega = SPRING_NOTCH;
+  let lastWheel = -Infinity;
   let lastSet = -1;
   let lastTime = 0;
   let frame = 0;
-  let running = false;
 
   const maxScroll = () => scroller.scrollHeight - scroller.clientHeight;
   const clamp = (value: number) => Math.max(0, Math.min(maxScroll(), value));
 
   function stop() {
     cancelAnimationFrame(frame);
-    running = false;
-    target = current = scroller.scrollTop;
+    spring = null;
   }
 
   function step(now: number) {
+    if (!spring) return;
     const dt = lastTime ? Math.min(MAX_FRAME, (now - lastTime) / 1000) : 1 / 60;
     lastTime = now;
-    current = easeToward(current, target, dt);
-    scroller.scrollTop = current;
+    spring = stepSpring(spring, target, omega, dt);
+    scroller.scrollTop = spring ? spring.pos : target;
     lastSet = scroller.scrollTop;
     onFrame?.();
-    if (current !== target) {
-      frame = requestAnimationFrame(step);
-    } else {
-      running = false;
-    }
+    if (spring) frame = requestAnimationFrame(step);
   }
 
   function onWheel(event: WheelEvent) {
@@ -77,20 +99,24 @@ export function createSmoothScroll(scroller: HTMLElement, { wheelTarget = scroll
     if (reducedMotion.matches || event.ctrlKey) return;
     if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
     event.preventDefault();
-    if (!running) target = current = scroller.scrollTop;
+    const now = performance.now();
+    omega = now - lastWheel < STREAM_GAP ? SPRING_STREAM : SPRING_NOTCH;
+    lastWheel = now;
+    if (!spring) {
+      target = scroller.scrollTop;
+      spring = { pos: target, vel: 0 };
+      lastTime = 0;
+      frame = requestAnimationFrame(step);
+    }
     target = clamp(target + wheelDeltaInPixels(event, scroller.clientHeight));
-    if (running || target === current) return;
-    running = true;
-    lastTime = 0;
-    frame = requestAnimationFrame(step);
   }
 
   function onScroll() {
-    if (running && Math.abs(scroller.scrollTop - lastSet) > FOREIGN_SCROLL_DISTANCE) stop();
+    if (spring && Math.abs(scroller.scrollTop - lastSet) > FOREIGN_SCROLL_DISTANCE) stop();
   }
 
   function onMotionPreferenceChange() {
-    if (reducedMotion.matches && running) stop();
+    if (reducedMotion.matches) stop();
   }
 
   // The scroll height changes when the frame resizes, so the target has to stay in range.
@@ -105,8 +131,7 @@ export function createSmoothScroll(scroller: HTMLElement, { wheelTarget = scroll
 
   return {
     destroy() {
-      cancelAnimationFrame(frame);
-      running = false;
+      stop();
       wheelTarget.removeEventListener("wheel", onWheel);
       scroller.removeEventListener("scroll", onScroll);
       reducedMotion.removeEventListener("change", onMotionPreferenceChange);

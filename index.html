@@ -3,13 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>Fixed Figure Smooth Scroll</title>
+    <title>Fixed Figure Polished Scroll</title>
     <script type="module" src="/src/main.ts"></script>
   </head>
   <body>
     <div class="stage" id="stage">
       <div class="scroller" id="scroller" tabindex="0" role="region" aria-label="Article text">
         <div class="content">
+          <p class="marker marker-begin" aria-hidden="true">BEGIN</p>
           <article class="article" id="article">
             <div class="wrap-spacer" id="wrap-spacer" aria-hidden="true"></div>
             <div class="wrap-band" id="wrap-band" aria-hidden="true"></div>
@@ -42,6 +43,7 @@
             <p>He still won't say whether Halyard will play together again. When I ask, he laughs and changes the subject to football, then comes back to it a few minutes later without being prompted. He says the door isn't locked, and he also says nobody has knocked on it.</p>
             <p>By the end of the call, the hotel bar downstairs is closing and someone is vacuuming the corridor outside his room. Rourke says he's going to bed, and then he talks for another twenty minutes about the first record he ever bought, a secondhand single with a scratch across the B-side that he still owns.</p>
           </article>
+          <p class="marker marker-end" aria-hidden="true">END</p>
         </div>
       </div>
 

@@ -58,6 +58,9 @@ body {
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
+  /* The text fades in over the top 46 reference px of the frame and out over the bottom 92. */
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 calc(var(--u) * 46), #000 calc(100% - var(--u) * 92), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 calc(var(--u) * 46), #000 calc(100% - var(--u) * 92), transparent 100%);
 }
 
 .scroller:focus-visible {
@@ -65,10 +68,37 @@ body {
   outline-offset: -2px;
 }
 
+/* One full frame of empty room sits above the first line and below the last line, so
+   the text, photo, caption, date and share icons can all scroll out of the frame.
+   The page opens scrolled past the top room, with the first line 52 below the frame's top. */
 .content {
+  --frame-height: 1288.125;
   position: relative;
-  padding-top: calc(var(--u) * 52);
-  padding-bottom: calc(var(--u) * 700);
+  padding-top: calc(var(--u) * (var(--frame-height) + 52));
+  padding-bottom: calc(var(--u) * var(--frame-height));
+}
+
+/* BEGIN and END sit in the empty frames and line up with the photo's left edge.
+   BEGIN's bottom edge is 100 above the opening view, and END's top edge is 100 below
+   the top of the final view. */
+.marker {
+  position: absolute;
+  left: calc(var(--u) * 638);
+  margin: 0;
+  font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+  font-size: calc(var(--u) * 225);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: calc(var(--u) * -4);
+  color: var(--ink);
+}
+
+.marker-begin {
+  top: calc(var(--u) * (var(--frame-height) - 100 - 225));
+}
+
+.marker-end {
+  bottom: calc(var(--u) * (var(--frame-height) - 100 - 225));
 }
 
 /* Posted date, rule and share icons. The block ignores the pointer so the wheel
@@ -148,6 +178,12 @@ body {
 
 .article p {
   margin: 0 0 calc(var(--u) * 43.5);
+  text-wrap: pretty;
+  hanging-punctuation: first;
+  font-kerning: normal;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* The spacer float takes no width and moves the band float down to the photo's
@@ -166,7 +202,9 @@ body {
   height: 0;
 }
 
-/* The photo and caption sit outside the scroller, so they stay fixed in the frame. */
+/* The photo and caption sit outside the scroller, so they stay fixed in the frame until
+   the text reaches its start or end. The script then moves them, and the date block,
+   with a shared translateY. */
 .figure {
   position: absolute;
   left: calc(var(--u) * 638);
