@@ -24,5 +24,4 @@ The page is built with Vite and TypeScript and has no UI framework. The approved
 ## Open items
 
 - The caption under the photo still describes a concert placeholder, and it needs real copy and a real credit.
-- The article text is original placeholder copy, repeated three times to make the page long enough to scroll.
 - The "Save article" button only dispatches an `article:save` event, and the host site needs to store the saved state.
